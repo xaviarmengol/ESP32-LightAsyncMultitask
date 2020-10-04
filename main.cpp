@@ -117,8 +117,8 @@ void tskClient(void *pvParameters){
                     if (stateTsk == state_t::WAITING) {
                         stateTsk = state_t::READY_TO_GET;
 
-                        // Arm again the timmer
-                        // The timmer will sendback a TIMEOUT message in x ms
+                        // Arm again the timer
+                        // The timer will sendback a TIMEOUT message in x ms
                         sendTimerEvent(queueClient, 1000);
                     }
                     break;
@@ -196,38 +196,36 @@ void tskServer(void *pvParameters){
 
             switch (receivedEvent.name) {
 
-            case (events::TIMEOUT): {
-                Serial.println("Server - Event: TIMEOUT");
+                case (events::TIMEOUT): {
+                    Serial.println("Server - Event: TIMEOUT");
 
-                if (stateTsk == state_t::READY_TO_ANSWER) {
-                    stateTsk = state_t::UPDATING_VALUE;
+                    if (stateTsk == state_t::READY_TO_ANSWER) {
+                        stateTsk = state_t::UPDATING_VALUE;
+                    }
+
+                    sendTimerEvent(queueServer, 3000);
+                    
+                    break;
                 }
 
-                sendTimerEvent(queueServer, 3000);
+                case (events::GET_VALUE_A): {
+                    Serial.println("Server - Event: GET_VALUE_A");
+
+                    sendEvent(events::VALUE_A, receivedEvent.queueOrigin, queueServer, valueA);
+                    break;
+                }
                 
-                break;
+                default: {
+
+                    Serial.print("Server - Event: ");
+                    Serial.print((int)receivedEvent.name);
+                    Serial.println(" was not expected, and is discharged.");
+
+                    break;
+                }
             }
-
-            case (events::GET_VALUE_A): {
-                Serial.println("Server - Event: GET_VALUE_A");
-
-                sendEvent(events::VALUE_A, receivedEvent.queueOrigin, queueServer, valueA);
-                break;
-            }
-            
-            default:
-
-                Serial.print("Server - Event: ");
-                Serial.print((int)receivedEvent.name);
-                Serial.println(" was not expected, and is discharged.");
-
-                break;
-            }
-
         }
-
     }
-
 }
 
 
