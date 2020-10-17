@@ -1,23 +1,28 @@
+#pragma once
+
 #include <Arduino.h>
 #include <vector>
 #include "eventsMgmt.h"
+
+#define MAX_TIMERS 20
 
 TaskHandle_t handTskTimer;
 
 void tskTimer(void *pvParameters){
 
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(2000));
     Serial.println("Task Timer on core: " + String(xPortGetCoreID()));
-    queueTimer = xQueueCreate( MAX_INP_QUEUE_LENTH , sizeof(event_t));
+    
+    static int32_t totalTimers=0;
+
+    int32_t tskIdTimer = (int32_t)tskNames::NODE_TIMER;
 
     struct timeAndOrigin_t {
         unsigned long time;
-        QueueHandle_t queueOrigin;
+        tskNames tskOrigin;
     };
 
-    std::vector <timeAndOrigin_t> times;
-    times.reserve(10);
-    event_t eventTimeout = event_t(events::TIMEOUT, queueTimer);
+    timeAndOrigin_t times[MAX_TIMERS];
 
     // SETUP the timer blocking
 
@@ -29,32 +34,40 @@ void tskTimer(void *pvParameters){
         // Send the TIMEOUTs messages when the timmer reach the set time
         // TODO: Refactor with a sorted list
 
-        int indexVector = 0;
-        for (timeAndOrigin_t time : times) {
-            if (millis() >= time.time) {
-                xQueueSend(time.queueOrigin, &eventTimeout, 0);
-                times.erase(times.begin() + indexVector);
-            } 
-            indexVector++;
+        for (int numTimer=0; numTimer<totalTimers; numTimer++) {
+            if (millis() >= times[numTimer].time) {
+                
+                sendEventToTask(events::TIMEOUT, times[numTimer].tskOrigin, tskNames::NODE_TIMER);
+                
+                for (int i=numTimer; i<totalTimers; i++) {
+                    if ( (i+1) < totalTimers) times[i]=times[i+1];
+                }
+                totalTimers--;
+            }             
         }
 
         // Event dispatcher. In this case, the block is in a task timer to allow the time management
 
         event_t receivedEvent = event_t(); // Always the same
-        if (xQueueReceive(queueTimer, &receivedEvent, 0) == pdPASS) {
+        
+        if (receiveEvent(tskDef[tskIdTimer].queue, &receivedEvent, 0)) {
 
             if (receivedEvent.name == events::SET_TIMEOUT) {
-                Serial.println("Timer - Event: SET_TIMEOUT");
+                //Serial.println("Timer - Event: SET_TIMEOUT");
 
                 timeAndOrigin_t time;
                 time.time = millis() + receivedEvent.value; // Value is a relative time to wait
-                time.queueOrigin = receivedEvent.queueOrigin;
-                times.push_back(time);
-            } else {
-                Serial.print("Timer - Event: ");
-                Serial.print((int)receivedEvent.name);
-                Serial.println(" was not expected, and is discharged.");
-            }
+                time.tskOrigin = receivedEvent.tskFrom;
+
+                times[totalTimers] = time;
+                
+                if (totalTimers<MAX_TIMERS) {
+                    totalTimers++;
+                } else {
+                    Serial.println("Error in Timer: Not enough slots. Review MAX_TIMERS");
+                }
+
+            } 
 
         } 
 
